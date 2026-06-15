@@ -252,7 +252,6 @@ class TrafficControlLayer : public Object
     Ptr<Node> m_node;
     /// Map storing the required information for each device with a queue disc installed
     std::map<Ptr<NetDevice>, NetDeviceInfo> m_netDevices;
-    ProtocolHandlerList m_handlers; //!< List of upper-layer handlers
 
     /**
      * The trace source fired when the Traffic Control layer drops a packet because
@@ -260,6 +259,9 @@ class TrafficControlLayer : public Object
      * the device queue is stopped
      */
     TracedCallback<Ptr<const Packet>> m_dropped;
+
+  public: 
+    ProtocolHandlerList m_handlers; //!< List of upper-layer handlers
 };
 
 } // namespace ns3

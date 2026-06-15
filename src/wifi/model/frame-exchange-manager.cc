@@ -299,7 +299,12 @@ FrameExchangeManager::StartTransmission(Ptr<Txop> dcf, uint16_t allowedWidth)
 {
     NS_LOG_FUNCTION(this << dcf << allowedWidth);
 
-    NS_ASSERT(!m_mpdu);
+    if (m_mpdu != nullptr)
+    {
+        NS_LOG_WARN("StartTransmission called while m_mpdu was not null! Transmission already in progress. Skipping this attempt to prevent state corruption.");
+        return false;
+    }
+
     if (m_txTimer.IsRunning())
     {
         m_txTimer.Cancel();

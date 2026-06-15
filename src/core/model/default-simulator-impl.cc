@@ -226,8 +226,13 @@ DefaultSimulatorImpl::Schedule(const Time& delay, EventImpl* event)
     NS_ASSERT_MSG(m_mainThreadId == std::this_thread::get_id(),
                   "Simulator::Schedule Thread-unsafe invocation!");
 
-    NS_ASSERT_MSG(delay.IsPositive(), "DefaultSimulatorImpl::Schedule(): Negative delay");
-    Time tAbsolute = delay + TimeStep(m_currentTs);
+    Time safeDelay = delay;
+    if (delay.IsNegative()) {
+        NS_LOG_WARN("Negative delay detected at " << Simulator::Now().GetSeconds() << 
+                    "s. Forcing to 0 to prevent crash.");
+        safeDelay = Seconds(0);
+    }
+    Time tAbsolute = safeDelay + TimeStep(m_currentTs);
 
     Scheduler::Event ev;
     ev.impl = event;

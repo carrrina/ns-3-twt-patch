@@ -39,8 +39,9 @@ build/
 
 version.cache
 
-
+.lock-ns3_darwin_build
 .idea/
+cmake-cache/
 cmake_cache/
 cmake-build-debug/
 cmake-build-relwithdebinfo/

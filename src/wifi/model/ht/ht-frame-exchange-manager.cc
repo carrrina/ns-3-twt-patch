@@ -873,7 +873,17 @@ HtFrameExchangeManager::GetPsduDurationId(Time txDuration, const WifiTxParameter
 {
     NS_LOG_FUNCTION(this << txDuration << &txParams);
 
-    NS_ASSERT(m_edca);
+    if (m_edca == nullptr) {
+        NS_LOG_ERROR("CRITICAL: m_edca is null in HtFrameExchangeManager. This usually means the MAC object was not fully initialized or is being accessed during teardown.");
+
+        if (txParams.m_acknowledgment && txParams.m_acknowledgment->acknowledgmentTime != Time::Min())
+        {
+            return txParams.m_acknowledgment->acknowledgmentTime;
+        }
+
+        // Return the most logical safe value. If we don't know the duration, returning the txDuration itself is safer than 0.
+        return txDuration;
+    }
 
     if (m_edca->GetTxopLimit(m_linkId).IsZero())
     {

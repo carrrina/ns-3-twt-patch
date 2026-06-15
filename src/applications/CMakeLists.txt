@@ -9,6 +9,8 @@ build_lib(
     helper/udp-echo-helper.cc
     model/application-packet-probe.cc
     model/bulk-send-application.cc
+    model/poisson-application.cc
+    model/weibull-exp-application.cc
     model/onoff-application.cc
     model/packet-loss-counter.cc
     model/packet-sink.cc
@@ -28,6 +30,7 @@ build_lib(
     model/video-application.cc
     helper/voip-helper.cc
     helper/video-helper.cc
+    helper/application-helper.cc
   HEADER_FILES
     helper/bulk-send-helper.h
     helper/on-off-helper.h
@@ -37,6 +40,8 @@ build_lib(
     helper/udp-echo-helper.h
     model/application-packet-probe.h
     model/bulk-send-application.h
+    model/poisson-application.h
+    model/weibull-exp-application.h
     model/onoff-application.h
     model/packet-loss-counter.h
     model/packet-sink.h
@@ -56,6 +61,7 @@ build_lib(
     model/video-application.h
     helper/voip-helper.h
     helper/video-helper.h
+    helper/application-helper.h
   LIBRARIES_TO_LINK ${libinternet}
   TEST_SOURCES
     test/three-gpp-http-client-server-test.cc

@@ -1,3 +1,23 @@
+# ns-3 Target Wake Time (TWT) patch enhancements
+
+Forked from [gtgnan/wifiTwt](https://github.com/gtgnan/wifiTwt); for more information read the original README below.
+
+We enhance their implementation for specific use cases.
+
+Main script: `scratch/videoTest.cc`.
+
+Example runs: `run_poisson.sh`, `run_weibull.sh`.
+
+Additions:
+- application that can generate traffic in packet batches following a Weibull distribution, at exponential inter-arrival times: `src/applications/model/weibull-exp-application.cc`
+- application that can generate traffic in individual packet arrivals following a Poisson process: `src/applications/model/poisson-application.cc`
+- UDP support
+- downlink traffic support
+- queue state trackers
+- more parameter customization; refer to the `videoTest.cc` CommandLine parser
+
+# Original README
+
 # The Network Simulator, Version 3
 
 [![codecov](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/graph/badge.svg)](https://codecov.io/gh/nsnam/ns-3-dev-git/branch/master/)
