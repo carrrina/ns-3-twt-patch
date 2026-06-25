@@ -6,6 +6,9 @@ We enhance their implementation for specific use cases.
 
 Main script: `scratch/videoTest.cc`.
 
+A small, warm-up packet is sent at 3s into the simulation, to establish ARP negotiation.
+The video traffic starts at ~10s, so we consider the first 10s of the simulation as a warm-up period.
+
 Example runs: `run_poisson.sh`, `run_weibull.sh`.
 
 Additions:
