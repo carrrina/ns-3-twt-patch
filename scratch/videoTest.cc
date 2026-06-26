@@ -58,6 +58,9 @@
 #include "ns3/wifi-mac.h"
 #include "ns3/qos-utils.h"
 #include "ns3/wifi-mac-queue.h"
+#include "ns3/wifi-mac-queue-elem.h"
+#include "ns3/wifi-mac-queue-container.h"
+#include "ns3/wifi-mpdu.h"
 #include <unordered_map>
 #include <iomanip>
 #include <sys/stat.h>
@@ -282,7 +285,7 @@ void PsduResponseTimeoutTraceAp (std::string context, uint8_t reason, Ptr<const 
     }
 }
 
-void MpduDropped_atSta(std::string context, WifiMacDropReason dropReason,Ptr<const WifiMpdu> mpdu)
+void MpduDropped_atSta(std::string context, WifiMacDropReason dropReason, Ptr<const WifiMpdu> mpdu)
 {
     if (Simulator::Now ().GetMicroSeconds()>metricsLoggingStartTime_s.GetMicroSeconds())
     {
@@ -298,7 +301,7 @@ void MpduDropped_atSta(std::string context, WifiMacDropReason dropReason,Ptr<con
     // std::cout << "MPDU expired at STA; t = " <<Simulator::Now().As(Time::MS)<<"; dropReason:"<<+dropReason<<";staId="<< ContextToNodeId (context)-1 <<std::endl;
 }
 
-void MpduDropped_atAp(std::string context, WifiMacDropReason dropReason,Ptr<const WifiMpdu> mpdu)
+void MpduDropped_atAp(std::string context, WifiMacDropReason dropReason, Ptr<const WifiMpdu> mpdu)
 {
     if (Simulator::Now ().GetMicroSeconds()>metricsLoggingStartTime_s.GetMicroSeconds())
     {
@@ -412,6 +415,95 @@ void WriteQueueSizeChangeToFile(std::ostream* queueSizeFile, std::string context
             << ";node_id=" << nodeId
             << std::endl;
     }
+}
+
+void PrintWifiQueueSnapshot(std::ostream* queueSnapshotFile, std::string context, Ptr<const ns3::WifiMacQueue> queue, const ns3::WifiMacQueueContainer& container, Ptr<const ns3::WifiMpdu> dequeuedItem, std::string eventLabel)
+{
+    *queueSnapshotFile << "\n========================================================" << std::endl;
+    *queueSnapshotFile << "=== [Wi-Fi Queue FULL SNAPSHOT: " << eventLabel << "] ===" << std::endl;
+    *queueSnapshotFile << "Path: " << context << std::endl;
+    *queueSnapshotFile << "Time: " << Simulator::Now().GetSeconds() << "s" << std::endl;
+    *queueSnapshotFile << "Aggregate Packets in MAC Queue: " << queue->GetNPackets() << std::endl;
+    *queueSnapshotFile << "--------------------------------------------------------" << std::endl;
+
+    if (dequeuedItem && dequeuedItem->GetPacket()) {
+        *queueSnapshotFile << "  [JUST DEQUEUED FROM FRONT] -> Packet ID: " << dequeuedItem->GetPacket()->GetUid() 
+                  << " | Dest MAC: " << dequeuedItem->GetHeader().GetAddr1() << std::endl;
+    }
+
+    uint32_t totalPrinted = 0;
+
+    // Attempting to loop over all destination sub-queues dynamically:
+    // We can sample the active destinations by looping through standard ACs (0 to 3) 
+    // or pulling the queues if the patch stores them by Destination ID.
+    
+    std::vector<ns3::Mac48Address> typicalDests;
+    // Add first 10 destination node MACs 
+    for (uint8_t i = 1; i <= 10; ++i) {
+        std::stringstream ss;
+        ss << "00:00:00:00:00:0" << std::hex << (int)i;
+        typicalDests.push_back(Mac48Address(ss.str().c_str()));
+    }
+
+    for (const auto& dest : typicalDests)
+    {
+        ns3::WifiContainerQueueId qId(
+            ns3::WIFI_QOSDATA_QUEUE, 
+            ns3::WIFI_UNICAST, 
+            dest,
+            AcIndex::AC_BE
+        );
+        const auto& subQueue = container.GetQueue(qId);
+
+        if (!subQueue.empty())
+        {
+            *queueSnapshotFile << " -> Sub-Queue for Destination [" << dest << "] (Size: " << subQueue.size() << " )" << std::endl;
+            uint32_t pos = 1;
+            for (auto it = subQueue.begin(); it != subQueue.end(); ++it)
+            {
+                Ptr<const ns3::WifiMpdu> mpdu = it->mpdu;
+                if (mpdu && mpdu->GetPacket())
+                {
+                    *queueSnapshotFile << "      [Pos " << pos << "] Packet ID: " << mpdu->GetPacket()->GetUid() 
+                              << " | Size: " << mpdu->GetPacket()->GetSize() << " bytes" << std::endl;
+                    totalPrinted++;
+                }
+                pos++;
+            }
+        }
+    }
+
+    *queueSnapshotFile << "Total tracked packets printed across all sub-queues: " << totalPrinted << std::endl;
+    *queueSnapshotFile << "========================================================\n" << std::endl;
+}
+
+void TraceWifiDequeue(std::ostream* queueSnapshotFile, std::string context, Ptr<const WifiMpdu> item)
+{
+    std::string queuePath = context;
+    size_t lastSlash = queuePath.find_last_of("/");
+    if (lastSlash != std::string::npos)
+    {
+        queuePath = queuePath.substr(0, lastSlash);
+    }
+
+    Config::MatchContainer matches = Config::LookupMatches(queuePath);
+    if (matches.GetN() > 0)
+    {
+        Ptr<WifiMacQueue> queue = matches.Get(0)->GetObject<WifiMacQueue>();
+        if (queue && item)
+        {
+            // Pass the whole container instead of a single sub-queue reference
+            const ns3::WifiMacQueueContainer& container = 
+                static_cast<const ns3::Queue<ns3::WifiMpdu, ns3::WifiMacQueueContainer>&>(*queue).GetContainer();
+            
+            PrintWifiQueueSnapshot(queueSnapshotFile, context, queue, container, item, "BEFORE TRANSMIT DEQUEUE");
+        }
+    }
+}
+
+void TraceWifiEnqueue(std::ostream* queueSnapshotFile, std::string context, Ptr<const WifiMpdu> item)
+{
+    *queueSnapshotFile << ">> [RX EVENT] Enqueuing Packet ID " << item->GetPacket()->GetUid() << std::endl;
 }
 
 void DisassociationLog(std::string context, Mac48Address address)
@@ -1118,7 +1210,6 @@ int main (int argc, char *argv[])
             }
             
             if (sendWarmupPacket) {
-                // clientApp.Start (MilliSeconds (videoAppStart_ms+i*100));
                 clientApp.Start (MilliSeconds (videoAppStart_ms));
             } else {
                 clientApp.Start (MilliSeconds (videoTrafficStart_ms));
@@ -1203,14 +1294,17 @@ int main (int argc, char *argv[])
         static std::ofstream* wifiMacQueueSizeFile = nullptr; 
         static std::ofstream* queueDiscSizeFile = nullptr; 
         static std::ofstream* serverL2QueueSizeFile = nullptr; 
-        std::stringstream wifiMacQueueSizeFilename, queueDiscSizeFilename, serverL2QueueSizeFilename;
+        static std::ofstream* queueSnapshotFile = nullptr; 
+        std::stringstream wifiMacQueueSizeFilename, queueDiscSizeFilename, serverL2QueueSizeFilename, queueSnapshotFilename;
 
         wifiMacQueueSizeFilename << LOG_PATH << "wifiMacQueueSize.log";
         queueDiscSizeFilename << LOG_PATH << "queueDiscSize.log";
         serverL2QueueSizeFilename << LOG_PATH << "serverL2queueSize.log";
+        queueSnapshotFilename << LOG_PATH << "APqueueSnapshot.log";
         wifiMacQueueSizeFile = new std::ofstream(wifiMacQueueSizeFilename.str().c_str());
         queueDiscSizeFile = new std::ofstream(queueDiscSizeFilename.str().c_str());
         serverL2QueueSizeFile = new std::ofstream(serverL2QueueSizeFilename.str().c_str());
+        queueSnapshotFile = new std::ofstream(queueSnapshotFilename.str().c_str());
 
         if (wifiMacQueueSizeFile->is_open() && !wifiMacQueueSizeFile->fail()) {
             Config::Connect ("/NodeList/*/$ns3::TrafficControlLayer/RootQueueDiscList/*/$ns3::QueueDisc/PacketsInQueue", MakeBoundCallback(&WriteQueueSizeChangeToFile, queueDiscSizeFile)); 
@@ -1222,8 +1316,11 @@ int main (int argc, char *argv[])
             Config::Connect ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Queue/PacketsInQueue", MakeBoundCallback(&WriteQueueSizeChangeToFile, &std::cout));
             Config::Connect ("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/TxQueue/PacketsInQueue", MakeBoundCallback (&WriteQueueSizeChangeToFile, &std::cout));
         }
+        // Print AP queue contents
+        Config::Connect("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Queue/Dequeue", MakeBoundCallback(&TraceWifiDequeue, queueSnapshotFile));
+        Config::Connect("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Queue/Enqueue", MakeBoundCallback(&TraceWifiEnqueue, queueSnapshotFile));
     }
-    Config::Connect ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Queue/PacketsInQueue", MakeBoundCallback(&UpdateQueueOccupancyTracker));
+    Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Queue/PacketsInQueue", MakeBoundCallback(&UpdateQueueOccupancyTracker));
 
     // State log trace for AP - for channel idle probability
     if (enableStateLogs && recordApPhyState)

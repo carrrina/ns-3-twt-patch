@@ -314,7 +314,7 @@ class Queue : public QueueBase
     /// Define ItemType as the type of the stored elements
     typedef Item ItemType;
 
-  protected:
+  public:
     /// Const iterator.
     typedef typename Container::const_iterator ConstIterator;
     /// Iterator.
